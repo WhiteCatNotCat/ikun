@@ -1,177 +1,148 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh">
 <head>
-    <title>贪吃蛇游戏</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>俄罗斯方块</title>
     <style>
-        canvas {
-            border: 2px solid #333;
-        }
         body {
+            font-family: Arial, sans-serif;
             display: flex;
-            flex-direction: column;
+            justify-content: center;
             align-items: center;
-            background-color: #f0f0f0;
+            height: 100vh;
+            margin: 0;
+            background-color: #222;
+            color: white;
         }
-        #score {
-            font-size: 24px;
-            margin: 10px;
+
+        canvas {
+            border: 1px solid #fff;
         }
     </style>
 </head>
 <body>
-    <div id="score">得分: 0</div>
-    <canvas id="gameCanvas" width="400" height="400"></canvas>
-
+    <canvas id="tetris" width="300" height="600"></canvas>
     <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        const gridSize = 20; // 网格尺寸
-        const tileCount = canvas.width / gridSize; // 20x20网格
-
-        // 初始化蛇
-        let snake = [
-            { x: 10, y: 10 }, // 蛇头
+        const canvas = document.getElementById('tetris');
+        const context = canvas.getContext('2d');
+        const grid = 30;  // 方格大小
+        const tetrominoes = [
+            [[1, 1, 1], [0, 1, 0]], // T形
+            [[1, 1], [1, 1]],       // 方块
+            [[1, 1, 0], [0, 1, 1]], // Z形
+            [[0, 1, 1], [1, 1, 0]], // S形
+            [[1, 1, 1, 1]],         // 直线
+            [[1, 1, 1], [1, 0, 0]], // L形
+            [[1, 1, 1], [0, 0, 1]]  // J形
         ];
-        let food = { x: 15, y: 15 };
-        let dx = 0; // x方向移动量
-        let dy = 0; // y方向移动量
-        let score = 0;
-        let gameLoop;
-        let gameSpeed = 100; // 游戏速度（毫秒）
+        let board = Array.from({ length: 20 }, () => Array(10).fill(0)); // 游戏区域
+        let currentPiece, currentPosition;
 
-        // 方向控制
-        document.addEventListener('keydown', changeDirection);
-
-        function changeDirection(event) {
-            const LEFT_KEY = 37;
-            const RIGHT_KEY = 39;
-            const UP_KEY = 38;
-            const DOWN_KEY = 40;
-
-            const keyPressed = event.keyCode;
-            const goingUp = dy === -1;
-            const goingDown = dy === 1;
-            const goingRight = dx === 1;
-            const goingLeft = dx === -1;
-
-            // 方向控制逻辑（不能反方向移动）
-            if (keyPressed === LEFT_KEY && !goingRight) {
-                dx = -1;
-                dy = 0;
-            }
-            if (keyPressed === UP_KEY && !goingDown) {
-                dx = 0;
-                dy = -1;
-            }
-            if (keyPressed === RIGHT_KEY && !goingLeft) {
-                dx = 1;
-                dy = 0;
-            }
-            if (keyPressed === DOWN_KEY && !goingUp) {
-                dx = 0;
-                dy = 1;
+        function drawBoard() {
+            context.fillStyle = '#222';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            for (let row = 0; row < 20; row++) {
+                for (let col = 0; col < 10; col++) {
+                    if (board[row][col]) {
+                        context.fillStyle = 'green';
+                        context.fillRect(col * grid, row * grid, grid, grid);
+                    }
+                }
             }
         }
 
-        // 游戏主循环
-        function startGame() {
-            // 重置游戏状态
-            snake = [{ x: 10, y: 10 }];
-            dx = 1;
-            dy = 0;
-            score = 0;
-            document.getElementById('score').innerHTML = '得分: 0';
-            
-            if (gameLoop) clearInterval(gameLoop);
-            gameLoop = setInterval(update, gameSpeed);
-            generateFood();
+        function drawPiece(piece, position) {
+            piece.forEach((row, r) => {
+                row.forEach((cell, c) => {
+                    if (cell) {
+                        context.fillStyle = 'red';
+                        context.fillRect((position.x + c) * grid, (position.y + r) * grid, grid, grid);
+                    }
+                });
+            });
+        }
+
+        function collide() {
+            return currentPiece.some((row, r) => {
+                return row.some((cell, c) => {
+                    if (cell && board[currentPosition.y + r] && board[currentPosition.y + r][currentPosition.x + c]) {
+                        return true;
+                    }
+                    return false;
+                });
+            });
+        }
+
+        function placePiece() {
+            currentPiece.forEach((row, r) => {
+                row.forEach((cell, c) => {
+                    if (cell) {
+                        board[currentPosition.y + r][currentPosition.x + c] = 1;
+                    }
+                });
+            });
+        }
+
+        function clearLines() {
+            for (let row = 19; row >= 0; row--) {
+                if (board[row].every(cell => cell === 1)) {
+                    board.splice(row, 1);
+                    board.unshift(Array(10).fill(0));
+                }
+            }
+        }
+
+        function rotatePiece() {
+            const newPiece = currentPiece[0].map((_, i) => currentPiece.map(row => row[i])).reverse();
+            if (!collide(newPiece)) {
+                currentPiece = newPiece;
+            }
+        }
+
+        function movePiece(dx, dy) {
+            currentPosition.x += dx;
+            currentPosition.y += dy;
+            if (collide()) {
+                currentPosition.x -= dx;
+                currentPosition.y -= dy;
+                if (dy === 1) {
+                    placePiece();
+                    clearLines();
+                    newPiece();
+                }
+            }
+        }
+
+        function newPiece() {
+            const randomIndex = Math.floor(Math.random() * tetrominoes.length);
+            currentPiece = tetrominoes[randomIndex];
+            currentPosition = { x: 3, y: 0 };
+            if (collide()) {
+                alert('游戏结束!');
+                board = Array.from({ length: 20 }, () => Array(10).fill(0));
+            }
         }
 
         function update() {
-            // 移动蛇
-            const head = { x: snake[0].x + dx, y: snake[0].y + dy };
-            
-            // 检查撞墙
-            if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
-                gameOver();
-                return;
-            }
-
-            // 检查自撞
-            for (let i = 0; i < snake.length; i++) {
-                if (head.x === snake[i].x && head.y === snake[i].y) {
-                    gameOver();
-                    return;
-                }
-            }
-
-            // 添加新头部
-            snake.unshift(head);
-
-            // 检查是否吃到食物
-            if (head.x === food.x && head.y === food.y) {
-                score += 10;
-                document.getElementById('score').innerHTML = `得分: ${score}`;
-                generateFood();
-            } else {
-                snake.pop(); // 移除尾部
-            }
-
-            draw();
+            drawBoard();
+            drawPiece(currentPiece, currentPosition);
         }
 
-        function draw() {
-            // 清空画布
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // 绘制蛇
-            ctx.fillStyle = 'green';
-            snake.forEach((segment, index) => {
-                ctx.fillRect(
-                    segment.x * gridSize,
-                    segment.y * gridSize,
-                    gridSize - 1,
-                    gridSize - 1
-                );
-            });
-
-            // 绘制食物
-            ctx.fillStyle = 'red';
-            ctx.fillRect(
-                food.x * gridSize,
-                food.y * gridSize,
-                gridSize - 1,
-                gridSize - 1
-            );
+        function gameLoop() {
+            movePiece(0, 1);
+            update();
         }
 
-        function generateFood() {
-            // 随机生成食物位置
-            food = {
-                x: Math.floor(Math.random() * tileCount),
-                y: Math.floor(Math.random() * tileCount)
-            };
-            // 检查食物是否生成在蛇身上
-            snake.forEach(segment => {
-                if (segment.x === food.x && segment.y === food.y) {
-                    generateFood();
-                }
-            });
-        }
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') movePiece(-1, 0);
+            if (e.key === 'ArrowRight') movePiece(1, 0);
+            if (e.key === 'ArrowDown') movePiece(0, 1);
+            if (e.key === 'ArrowUp') rotatePiece();
+        });
 
-        function gameOver() {
-            clearInterval(gameLoop);
-            alert(`游戏结束！得分: ${score}\n按空格键重新开始`);
-            document.addEventListener('keydown', (e) => {
-                if (e.code === 'Space') {
-                    startGame();
-                }
-            });
-        }
-
-        // 开始游戏
-        startGame();
+        newPiece();
+        setInterval(gameLoop, 1000 / 2); // 控制游戏速度
     </script>
 </body>
 </html>
